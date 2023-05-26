@@ -1,16 +1,17 @@
-use std::sync::Mutex;
+use std::fmt;
+use std::sync::{Arc, Mutex};
 
 use crate::id_manager::IdManager;
 use crate::id_type::IdType;
 
-pub struct SmartId<'a, T: IdType> {
-    manager: &'a Mutex<IdManager<T>>,
+pub struct SmartId<T: IdType> {
+    manager: Arc<Mutex<IdManager<T>>>,
     id: T,
     we_own_id: bool,
 }
 
-impl<'a, T: IdType> SmartId<'a, T> {
-    pub fn new(manager: &'a Mutex<IdManager<T>>) -> Self {
+impl<T: IdType> SmartId<T> {
+    pub fn new(manager: Arc<Mutex<IdManager<T>>>) -> Self {
         let mut locked = manager.lock().unwrap();
 
         if !locked.can_allocate()
@@ -20,7 +21,7 @@ impl<'a, T: IdType> SmartId<'a, T> {
 
         let id = locked.allocate();
 
-        SmartId { manager, id, we_own_id: true }
+        SmartId { manager : manager.clone(), id, we_own_id: true }
     }
 
     pub fn release(&mut self) -> T {
@@ -36,7 +37,13 @@ impl<'a, T: IdType> SmartId<'a, T> {
     }
 }
 
-impl<'a, T: IdType> Drop for SmartId<'a, T> {
+impl<T: IdType> fmt::Display for SmartId< T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[{}]", self.id)
+    }
+}
+
+impl<T: IdType> Drop for SmartId<T> {
     fn drop(&mut self) {
         let mut locked = self.manager.lock().unwrap();
 
@@ -55,12 +62,12 @@ mod tests {
 
     #[test]
     fn test_create_one_smart_id() {
-        let manager = Mutex::new(IdManager::<u8>::new(ReuseSlow));
+        let manager = Arc::new(Mutex::new(IdManager::<u8>::new(ReuseSlow)));
 
         assert_eq!(manager.lock().unwrap().dump(), "[0,255]");
 
         {
-            let id1 = SmartId::<u8>::new(&manager);
+            let id1 = SmartId::<u8>::new(manager.clone());
 
             let expected_id: u8 = 0;
 
@@ -74,12 +81,12 @@ mod tests {
 
     #[test]
     fn test_create_multiple_smart_ids() {
-        let manager = Mutex::new(IdManager::<u8>::new(ReuseSlow));
+        let manager = Arc::new(Mutex::new(IdManager::<u8>::new(ReuseSlow)));
 
         assert_eq!(manager.lock().unwrap().dump(), "[0,255]");
 
         {
-            let id1 = SmartId::<u8>::new(&manager);
+            let id1 = SmartId::<u8>::new(manager.clone());
 
             let expected_id1: u8 = 0;
 
@@ -88,7 +95,7 @@ mod tests {
             assert_eq!(manager.lock().unwrap().dump(), "[1,255]");
 
             {
-                let mut id2 = SmartId::new(&manager);
+                let mut id2 = SmartId::new(manager.clone());
 
                 let expected_id2: u8 = 1;
 
@@ -99,7 +106,7 @@ mod tests {
                 id2.release();
 
                 {
-                    let id3 = SmartId::new(&manager);
+                    let id3 = SmartId::new(manager.clone());
 
                     let expected_id: u8 = 2;
 
@@ -117,12 +124,12 @@ mod tests {
 
     #[test]
     fn test_release() {
-        let manager = Mutex::new(IdManager::<u8>::new(ReuseSlow));
+        let manager = Arc::new(Mutex::new(IdManager::<u8>::new(ReuseSlow)));
 
         assert_eq!(manager.lock().unwrap().dump(), "[0,255]");
 
         {
-            let mut id1 = SmartId::<u8>::new(&manager);
+            let mut id1 = SmartId::<u8>::new(manager.clone());
 
             assert_eq!(manager.lock().unwrap().dump(), "[1,255]");
 

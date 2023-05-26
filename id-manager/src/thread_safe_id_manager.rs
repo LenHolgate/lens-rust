@@ -1,23 +1,24 @@
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::id_manager::IdManager;
 use crate::id_type::IdType;
 use crate::reuse_policy::ReusePolicy;
 use crate::smart_id::SmartId;
 
+#[derive(Clone)]
 pub struct ThreadSafeIdManager<T: IdType> {
-    manager: Mutex<IdManager<T>>,
+    manager: Arc<Mutex<IdManager<T>>>,
 }
 
 impl<T: IdType> ThreadSafeIdManager<T> {
     pub fn new(reuse_policy: ReusePolicy) -> Self {
-        let manager = Mutex::new(IdManager::<T>::new(reuse_policy));
+        let manager = Arc::new(Mutex::new(IdManager::<T>::new(reuse_policy)));
 
         ThreadSafeIdManager { manager }
     }
 
     pub fn new_limited_range(reuse_policy: ReusePolicy, min_id: T, max_id: T) -> Self {
-        let manager = Mutex::new(IdManager::<T>::new_limited_range(reuse_policy, min_id, max_id));
+        let manager = Arc::new(Mutex::new(IdManager::<T>::new_limited_range(reuse_policy, min_id, max_id)));
 
         ThreadSafeIdManager { manager }
     }
@@ -41,7 +42,7 @@ impl<T: IdType> ThreadSafeIdManager<T> {
     }
 
     pub fn allocate_id(&self) -> SmartId<T> {
-        SmartId::new(&self.manager)
+        SmartId::new(self.manager.clone())
     }
 
     fn free(&self, id: T) {
